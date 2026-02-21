@@ -1,8 +1,14 @@
 {
-    "name": "yourname/devpulse-wp",
+    "name": "sekolahcode/devpulse-wp",
     "description": "Real-time error tracking for WordPress — self-hosted.",
     "type": "wordpress-plugin",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "SekolahCode",
+            "homepage": "https://github.com/SekolahCode"
+        }
+    ],
     "require": {
         "php": ">=7.4"
     },

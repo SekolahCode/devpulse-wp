@@ -1,5 +1,7 @@
 <?php
 
+defined('ABSPATH') || exit;
+
 namespace DevPulseWP;
 
 class Handler
@@ -18,6 +20,7 @@ class Handler
 
         // 1. Native PHP error handlers
         set_exception_handler([self::class, 'captureException']);
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler
         set_error_handler([self::class, 'captureError']);
         register_shutdown_function([self::class, 'captureShutdown']);
 
@@ -38,6 +41,7 @@ class Handler
     // ── PHP Error Handler ───────────────────────────────────────────────────
     public static function captureError(int $severity, string $message, string $file, int $line): bool
     {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_reporting
         if (!(error_reporting() & $severity)) return false;
         self::captureException(new \ErrorException($message, 0, $severity, $file, $line));
         return false;
@@ -150,17 +154,15 @@ class Handler
     {
         if (PHP_SAPI === 'cli') return null;
 
-        // Sanitize server vars — they come from the web server and are untrusted
-        // Use native PHP — wp_unslash() is a no-op since magic_quotes_gpc was
-        // removed in PHP 5.4, and these values go into a JSON payload (not HTML).
+        // Sanitize server vars — they come from the web server and are untrusted.
         $uri    = isset($_SERVER['REQUEST_URI'])
-            ? filter_var($_SERVER['REQUEST_URI'], FILTER_SANITIZE_URL)
+            ? filter_var(wp_unslash($_SERVER['REQUEST_URI']), FILTER_SANITIZE_URL)
             : '/';
         $method = isset($_SERVER['REQUEST_METHOD'])
-            ? trim((string) $_SERVER['REQUEST_METHOD'])
+            ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD']))
             : 'GET';
         $ip     = isset($_SERVER['REMOTE_ADDR'])
-            ? trim((string) $_SERVER['REMOTE_ADDR'])
+            ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']))
             : null;
 
         return [
@@ -182,6 +184,7 @@ class Handler
             $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             if ($json === false) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                 error_log('DevPulse: json_encode failed — ' . json_last_error_msg());
                 return false;
             }
@@ -197,6 +200,7 @@ class Handler
                 ]);
 
                 if (is_wp_error($response)) {
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                     error_log('DevPulse: ' . $response->get_error_message());
                     return false;
                 }
@@ -206,6 +210,7 @@ class Handler
 
             // Fallback for shutdown/early-boot contexts — synchronous stream request
             if (!ini_get('allow_url_fopen')) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                 error_log('DevPulse: allow_url_fopen is disabled; cannot send event via fallback transport.');
                 return false;
             }
@@ -224,6 +229,7 @@ class Handler
             $result = @file_get_contents(self::$dsn, false, $context);
             return $result !== false;
         } catch (\Throwable $e) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             error_log('DevPulse send() failed: ' . $e->getMessage());
             return false;
         } finally {
