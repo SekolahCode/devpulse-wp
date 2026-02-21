@@ -1,0 +1,23 @@
+{
+    "name": "yourname/devpulse-wp",
+    "description": "Real-time error tracking for WordPress — self-hosted.",
+    "type": "wordpress-plugin",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "php-stubs/wordpress-stubs": "^6.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "DevPulseWP\\": "src/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.4"
+        },
+        "allow-plugins": {}
+    }
+}
