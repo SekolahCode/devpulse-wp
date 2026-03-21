@@ -168,6 +168,9 @@ function devpulse_admin_init(): void
     // Enqueue admin assets
     add_action('admin_enqueue_scripts', [Admin::class, 'enqueueAssets']);
 
+    // AJAX: repair database options
+    add_action('wp_ajax_devpulse_repair', [Admin::class, 'repairDb']);
+
     // Handle activation redirect on admin_init (get_current_screen() is not
     // available on 'init'; check $_GET['page'] instead)
     add_action('admin_init', 'devpulse_activation_redirect');

@@ -104,12 +104,14 @@ class Admin
          * @param array $config JavaScript configuration.
          */
         $config = apply_filters('devpulse_admin_js_config', [
-            'ajaxUrl'     => admin_url('admin-ajax.php'),
-            'nonce'       => wp_create_nonce('devpulse_test'),
-            'action'      => 'devpulse_test',
-            'sendingText' => __('Sending...', 'devpulse'),
-            'successText' => __('Event sent!', 'devpulse'),
-            'failedText'  => __('Failed', 'devpulse'),
+            'ajaxUrl'      => admin_url('admin-ajax.php'),
+            'nonce'        => wp_create_nonce('devpulse_test'),
+            'action'       => 'devpulse_test',
+            'repairNonce'  => wp_create_nonce('devpulse_repair'),
+            'repairAction' => 'devpulse_repair',
+            'sendingText'  => __('Sending...', 'devpulse'),
+            'successText'  => __('Event sent!', 'devpulse'),
+            'failedText'   => __('Failed', 'devpulse'),
         ]);
 
         wp_add_inline_script(
@@ -380,6 +382,22 @@ class Admin
 
             <hr />
 
+            <h2><?php esc_html_e('Repair Database', 'devpulse'); ?></h2>
+            <p>
+                <?php esc_html_e('Restore missing options to their defaults, validate stored values, and clear stale transients.', 'devpulse'); ?>
+            </p>
+            <p>
+                <button type="button" id="devpulse-repair" class="button button-secondary">
+                    <?php esc_html_e('Repair Database', 'devpulse'); ?>
+                </button>
+                <span id="devpulse-repair-result" class="devpulse-result" aria-live="polite"></span>
+            </p>
+            <div id="devpulse-repair-details" style="display:none; margin-top:10px;">
+                <ul id="devpulse-repair-list" class="ul-disc" style="margin-left:2em;"></ul>
+            </div>
+
+            <hr />
+
             <h2><?php esc_html_e('Documentation', 'devpulse'); ?></h2>
             <p>
                 <?php
@@ -392,5 +410,97 @@ class Admin
             </p>
         </div>
 <?php
+    }
+
+    /**
+     * AJAX handler: repair plugin database options.
+     *
+     * Restores missing options to defaults, validates stored values,
+     * and flushes stale transients.
+     *
+     * @since 1.0.0
+     */
+    public static function repairDb(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions.', 'devpulse'), 403);
+            return;
+        }
+
+        if (!check_ajax_referer('devpulse_repair', 'nonce', false)) {
+            wp_send_json_error(__('Invalid nonce.', 'devpulse'), 403);
+            return;
+        }
+
+        $repairs = [];
+
+        // 1. Restore missing options with defaults
+        $defaults = [
+            'devpulse_dsn'     => '',
+            'devpulse_env'     => 'production',
+            'devpulse_enabled' => 0,
+        ];
+
+        foreach ($defaults as $option => $default) {
+            if (get_option($option) === false) {
+                add_option($option, $default);
+                /* translators: %s: option name */
+                $repairs[] = sprintf(__('Restored missing option: %s', 'devpulse'), $option);
+            }
+        }
+
+        // 2. Validate DSN — must be a valid URL or empty
+        $dsn = get_option('devpulse_dsn', '');
+        if (!empty($dsn) && !filter_var($dsn, FILTER_VALIDATE_URL)) {
+            update_option('devpulse_dsn', '');
+            $repairs[] = __('Cleared invalid DSN value.', 'devpulse');
+        }
+
+        // 3. Validate environment — fall back to production if unrecognised
+        $env     = get_option('devpulse_env', 'production');
+        $allowed = ['production', 'staging', 'development', 'local', 'test'];
+        if (!in_array($env, $allowed, true) && !preg_match('/^[a-z0-9_\-]+$/', $env)) {
+            update_option('devpulse_env', 'production');
+            $repairs[] = __('Reset invalid environment to "production".', 'devpulse');
+        }
+
+        // 4. Flush stale transients
+        delete_transient('devpulse_activated');
+
+        // 5. Multisite — repair each sub-site
+        if (is_multisite()) {
+            global $wpdb;
+            $blog_ids = $wpdb->get_col(
+                $wpdb->prepare('SELECT blog_id FROM %i', $wpdb->blogs)
+            );
+
+            foreach ($blog_ids as $blog_id) {
+                switch_to_blog((int) $blog_id);
+
+                foreach ($defaults as $option => $default) {
+                    if (get_option($option) === false) {
+                        add_option($option, $default);
+                        /* translators: 1: option name, 2: blog ID */
+                        $repairs[] = sprintf(
+                            __('Restored missing option %1$s on site %2$d.', 'devpulse'),
+                            $option,
+                            (int) $blog_id
+                        );
+                    }
+                }
+
+                delete_transient('devpulse_activated');
+                restore_current_blog();
+            }
+        }
+
+        $message = empty($repairs)
+            ? __('Database is healthy — no repairs needed.', 'devpulse')
+            : __('Repair completed successfully.', 'devpulse');
+
+        wp_send_json_success([
+            'message' => $message,
+            'repairs' => $repairs,
+        ]);
     }
 }
