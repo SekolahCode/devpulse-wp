@@ -168,26 +168,39 @@ function devpulse_admin_init(): void
     // Enqueue admin assets
     add_action('admin_enqueue_scripts', [Admin::class, 'enqueueAssets']);
 
-    // Handle activation redirect
-    if (get_transient('devpulse_activated')) {
-        delete_transient('devpulse_activated');
+    // Handle activation redirect on admin_init (get_current_screen() is not
+    // available on 'init'; check $_GET['page'] instead)
+    add_action('admin_init', 'devpulse_activation_redirect');
+}
 
-        // Only redirect if not already on settings page
-        $screen = get_current_screen();
-        if ($screen && $screen->id !== 'settings_page_devpulse') {
-            /**
-             * Action: Fires after plugin is activated.
-             *
-             * @since 1.0.0
-             */
-            do_action('devpulse_after_activate');
+/**
+ * Redirect to settings page after plugin activation.
+ *
+ * @since 1.0.0
+ */
+function devpulse_activation_redirect(): void
+{
+    if (!get_transient('devpulse_activated')) {
+        return;
+    }
 
-            // Redirect to settings page
-            if (current_user_can('manage_options')) {
-                wp_safe_redirect(admin_url('options-general.php?page=devpulse'));
-                exit;
-            }
-        }
+    delete_transient('devpulse_activated');
+
+    // Don't redirect if already on the settings page
+    if (isset($_GET['page']) && $_GET['page'] === 'devpulse') {
+        return;
+    }
+
+    /**
+     * Action: Fires after plugin is activated.
+     *
+     * @since 1.0.0
+     */
+    do_action('devpulse_after_activate');
+
+    if (current_user_can('manage_options')) {
+        wp_safe_redirect(admin_url('options-general.php?page=devpulse'));
+        exit;
     }
 }
 
