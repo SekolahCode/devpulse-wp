@@ -117,8 +117,25 @@ class Handler
     }
 
     // ── Exception Handler ───────────────────────────────────────────────────
+    /**
+     * Capture an exception.
+     *
+     * @since 1.0.0
+     * @param \Throwable $e The exception to capture.
+     */
     public static function captureException(\Throwable $e): void
     {
+        /**
+         * Filter: Allow filtering exceptions before capture.
+         *
+         * @since 1.0.0
+         * @param bool   $capture Whether to capture the exception.
+         * @param object $e       The exception object.
+         */
+        if (!apply_filters('devpulse_capture_exception', true, $e)) {
+            return;
+        }
+
         self::send(self::buildFromException($e));
     }
 
@@ -219,19 +236,51 @@ class Handler
         return $frames;
     }
 
+    /**
+     * Build context data with caching for better performance.
+     *
+     * Uses transient caching to avoid repeated calls to WordPress APIs.
+     *
+     * @since 1.0.0
+     * @return array Context data.
+     */
     private static function buildContext(): array
     {
-        return [
-            'php'            => PHP_VERSION,
-            'platform'       => 'wordpress',
-            'wordpress'      => get_bloginfo('version'),
-            'active_plugins' => get_option('active_plugins', []),
-            'theme'          => get_template(),
-            'environment'    => self::$env,
-            'memory'         => memory_get_peak_usage(true),
-            'is_admin'       => is_admin(),
-            'multisite'      => is_multisite(),
+        $now = time();
+
+        // Return cached context if still valid
+        if (
+            self::$context_cache !== null
+            && ($now - self::$context_cache_time) < self::CONTEXT_CACHE_TTL
+        ) {
+            return self::$context_cache;
+        }
+
+        // Get active plugins - limit to first 20 to prevent huge payloads
+        $active_plugins = get_option('active_plugins', []);
+        if (count($active_plugins) > 20) {
+            $active_plugins = array_slice($active_plugins, 0, 20);
+            $active_plugins[] = '... truncated';
+        }
+
+        self::$context_cache = [
+            'php'             => PHP_VERSION,
+            'platform'        => 'wordpress',
+            'wordpress'       => get_bloginfo('version'),
+            'active_plugins'  => $active_plugins,
+            'theme'           => get_template(),
+            'theme_parent'    => get_stylesheet(),
+            'environment'     => self::$env,
+            'memory'          => memory_get_peak_usage(true),
+            'is_admin'        => is_admin(),
+            'multisite'       => is_multisite(),
+            'wp_debug'        => (defined('WP_DEBUG') && WP_DEBUG),
+            'wp_debug_log'    => (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG),
         ];
+
+        self::$context_cache_time = $now;
+
+        return self::$context_cache;
     }
 
     private static function buildRequest(): ?array
@@ -257,7 +306,6 @@ class Handler
     }
 
     // ── HTTP Transport ───────────────────────────────────────────────────────
-    private static bool $sending = false;
 
     private static function send(array $payload): bool
     {
