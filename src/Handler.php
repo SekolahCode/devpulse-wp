@@ -1,18 +1,63 @@
 <?php
 
-defined('ABSPATH') || exit;
+/**
+ * DevPulse Error Handler
+ *
+ * @package DevPulseWP
+ * @since 1.0.0
+ */
 
 namespace DevPulseWP;
 
+use WP_Error;
+
+defined('ABSPATH') || exit;
+
 class Handler
 {
+    /** @var string DSN URL for sending events */
     private static string $dsn;
-    private static string $env;
-    private static bool   $booted = false;
 
+    /** @var string Current environment */
+    private static string $env;
+
+    /** @var bool Whether handler is initialized */
+    private static bool $booted = false;
+
+    /** @var bool Prevent recursive error capture */
+    private static bool $sending = false;
+
+    /** @var array Cached context data */
+    private static ?array $context_cache = null;
+
+    /** @var int Cache timestamp */
+    private static int $context_cache_time = 0;
+
+    /** @var int Context cache TTL in seconds (5 minutes) */
+    private const CONTEXT_CACHE_TTL = 300;
+
+    /**
+     * Initialize the error handler.
+     *
+     * @since 1.0.0
+     * @param string $dsn DSN URL for sending events.
+     * @param string $env Environment name.
+     */
     public static function init(string $dsn, string $env = 'production'): void
     {
-        if (self::$booted) return;
+        if (self::$booted) {
+            return;
+        }
+
+        /**
+         * Filter: Allow disabling DevPulse before initialization.
+         *
+         * @since 1.0.0
+         * @param bool $enabled Whether to enable DevPulse.
+         */
+        if (!apply_filters('devpulse_enabled', true)) {
+            return;
+        }
 
         self::$dsn    = $dsn;
         self::$env    = $env;
@@ -20,16 +65,55 @@ class Handler
 
         // 1. Native PHP error handlers
         set_exception_handler([self::class, 'captureException']);
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler
         set_error_handler([self::class, 'captureError']);
         register_shutdown_function([self::class, 'captureShutdown']);
 
         // 2. WordPress-specific hooks
         add_filter('wp_die_handler', [self::class, 'wpDieHandler']);
-        add_action('shutdown',       [self::class, 'captureDbErrors']);
+        add_action('shutdown', [self::class, 'captureDbErrors']);
 
         // Test endpoint — logged-in users only (nopriv intentionally omitted)
         add_action('wp_ajax_devpulse_test', [self::class, 'ajaxTest']);
+
+        /**
+         * Action: Fires after DevPulse handler is initialized.
+         *
+         * @since 1.0.0
+         */
+        do_action('devpulse_loaded');
+    }
+
+    /**
+     * Check if handler is initialized.
+     *
+     * @since 1.0.0
+     * @return bool
+     */
+    public static function is_loaded(): bool
+    {
+        return self::$booted;
+    }
+
+    /**
+     * Get the current DSN.
+     *
+     * @since 1.0.0
+     * @return string
+     */
+    public static function get_dsn(): string
+    {
+        return self::$dsn;
+    }
+
+    /**
+     * Get the current environment.
+     *
+     * @since 1.0.0
+     * @return string
+     */
+    public static function get_env(): string
+    {
+        return self::$env;
     }
 
     // ── Exception Handler ───────────────────────────────────────────────────
@@ -226,7 +310,17 @@ class Handler
             ]);
 
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-            $result = @file_get_contents(self::$dsn, false, $context);
+            $streamError = null;
+            set_error_handler(static function (int $errno, string $errstr) use (&$streamError): bool {
+                $streamError = $errstr;
+                return true;
+            });
+            $result = file_get_contents(self::$dsn, false, $context);
+            restore_error_handler();
+            if ($streamError !== null) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log('DevPulse: stream error — ' . $streamError);
+            }
             return $result !== false;
         } catch (\Throwable $e) {
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
