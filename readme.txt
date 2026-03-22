@@ -2,9 +2,9 @@
 Contributors: sekolahcode
 Tags: error-tracking, monitoring, performance, logging, sentry
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 1.0.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
