@@ -1,0 +1,38 @@
+#!/bin/sh
+# Build a clean plugin ZIP before every push.
+# The ZIP lands in dist/ (gitignored) so you can upload it directly to WordPress.
+
+set -e
+
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION=$(grep -m1 "^ \* Version:" "$PLUGIN_DIR/devpulse.php" | awk '{print $3}')
+ZIP_NAME="devpulse-${VERSION}.zip"
+DIST_DIR="$PLUGIN_DIR/dist"
+
+echo "📦 Building $ZIP_NAME..."
+
+# Clean previous build
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR/devpulse"
+
+# Copy plugin files, excluding everything that shouldn't ship
+rsync -r \
+  --exclude='.git' \
+  --exclude='.github' \
+  --exclude='.githooks' \
+  --exclude='.gitattributes' \
+  --exclude='.gitignore' \
+  --exclude='composer.json' \
+  --exclude='composer.lock' \
+  --exclude='vendor' \
+  --exclude='README.md' \
+  --exclude='dist' \
+  --exclude='*.zip' \
+  "$PLUGIN_DIR/" "$DIST_DIR/devpulse/"
+
+# Create the ZIP
+cd "$DIST_DIR"
+zip -r "$ZIP_NAME" devpulse/ -x "*.DS_Store"
+rm -rf devpulse/
+
+echo "✅ dist/$ZIP_NAME is ready to upload"
