@@ -1,0 +1,45 @@
+name: Build Plugin ZIP
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(grep -m1 "^ \* Version:" devpulse.php | awk '{print $3}')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build ZIP
+        run: |
+          mkdir -p dist/devpulse
+          rsync -r \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitattributes' \
+            --exclude='.gitignore' \
+            --exclude='composer.json' \
+            --exclude='composer.lock' \
+            --exclude='vendor' \
+            --exclude='README.md' \
+            --exclude='dist' \
+            . dist/devpulse/
+          cd dist
+          zip -r "devpulse-${{ steps.version.outputs.version }}.zip" devpulse/
+          echo "Built devpulse-${{ steps.version.outputs.version }}.zip"
+          unzip -l "devpulse-${{ steps.version.outputs.version }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devpulse-${{ steps.version.outputs.version }}
+          path: dist/devpulse-${{ steps.version.outputs.version }}.zip
+          retention-days: 90
