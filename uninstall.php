@@ -17,6 +17,8 @@ $options = [
     'devpulse_dsn',
     'devpulse_env',
     'devpulse_enabled',
+    'devpulse_sample_rate',
+    'devpulse_release',
 ];
 
 // Delete single site options
@@ -39,9 +41,10 @@ if (is_multisite()) {
             delete_option($option);
         }
 
+        delete_transient( 'devpulse_activated' );
         restore_current_blog();
     }
 }
 
-// Delete transients
+// Delete transients (single-site)
 delete_transient('devpulse_activated');
