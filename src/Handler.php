@@ -157,9 +157,22 @@ class Handler
         $fatals = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
         if (!in_array($error['type'], $fatals, true)) return;
 
-        self::captureException(
+        $type_names = [
+            E_ERROR         => 'E_ERROR',
+            E_PARSE         => 'E_PARSE',
+            E_CORE_ERROR    => 'E_CORE_ERROR',
+            E_COMPILE_ERROR => 'E_COMPILE_ERROR',
+        ];
+
+        $payload = self::buildFromException(
             new \ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line'])
         );
+
+        // Tag this as a fatal so the dashboard can explain the missing call stack
+        $payload['is_fatal']       = true;
+        $payload['error_type']     = $type_names[$error['type']] ?? 'UNKNOWN';
+
+        self::send($payload);
     }
 
     // ── wp_die() Handler ────────────────────────────────────────────────────
@@ -268,6 +281,7 @@ class Handler
             'platform'        => 'wordpress',
             'wordpress'       => get_bloginfo('version'),
             'active_plugins'  => $active_plugins,
+            'plugin_count'    => count(get_option('active_plugins', [])),
             'theme'           => get_template(),
             'theme_parent'    => get_stylesheet(),
             'environment'     => self::$env,
