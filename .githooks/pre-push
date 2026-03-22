@@ -15,13 +15,10 @@ echo "📦 Building $ZIP_NAME..."
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/devpulse"
 
-# Copy plugin files, excluding everything that shouldn't ship
+# Copy plugin files, excluding everything that shouldn't ship.
+# --exclude='.*' strips ALL dotfiles (e.g. .gitkeep) — WP.org rejects them.
 rsync -r \
-  --exclude='.git' \
-  --exclude='.github' \
-  --exclude='.githooks' \
-  --exclude='.gitattributes' \
-  --exclude='.gitignore' \
+  --exclude='.*' \
   --exclude='composer.json' \
   --exclude='composer.lock' \
   --exclude='vendor' \
@@ -30,9 +27,12 @@ rsync -r \
   --exclude='*.zip' \
   "$PLUGIN_DIR/" "$DIST_DIR/devpulse/"
 
+# Ensure languages/ directory exists even though .gitkeep was stripped.
+mkdir -p "$DIST_DIR/devpulse/languages"
+
 # Create the ZIP
 cd "$DIST_DIR"
-zip -r "$ZIP_NAME" devpulse/ -x "*.DS_Store"
+zip -r "$ZIP_NAME" devpulse/
 rm -rf devpulse/
 
 echo "✅ dist/$ZIP_NAME is ready to upload"
