@@ -160,6 +160,56 @@ class Handler {
 	}
 
 	/**
+	 * Send a blocking test event and return whether the server accepted it.
+	 *
+	 * Bypasses rate limiting and uses a blocking HTTP request so the caller can
+	 * confirm the server actually received and accepted the payload (2xx response).
+	 * Use only from the admin connection-test action — never from error handlers.
+	 *
+	 * @since 1.0.0
+	 * @return bool True if the server responded with 2xx, false otherwise.
+	 */
+	public function send_test(): bool {
+		if ( ! function_exists( 'wp_remote_post' ) ) {
+			return false;
+		}
+
+		$payload = [
+			'level'     => 'info',
+			'message'   => 'DevPulse WordPress connection test',
+			'context'   => $this->build_context(),
+			'request'   => $this->build_request(),
+			'timestamp' => gmdate( 'c' ),
+		];
+
+		if ( $this->release !== null ) {
+			$payload['release'] = $this->release;
+		}
+
+		$json = json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+
+		if ( $json === false ) {
+			return false;
+		}
+
+		$response = wp_remote_post( $this->dsn, [
+			'timeout'     => 5,    // longer timeout: user is waiting for feedback
+			'blocking'    => true, // must be blocking so we can read the status code
+			'headers'     => [ 'Content-Type' => 'application/json' ],
+			'body'        => $json,
+			'data_format' => 'body',
+		] );
+
+		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+
+		return $code >= 200 && $code < 300;
+	}
+
+	/**
 	 * Manually capture a free-form message.
 	 *
 	 * @since 1.0.0

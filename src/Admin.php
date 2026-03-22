@@ -500,7 +500,7 @@ class Admin {
 		// Reuse the running handler; if the plugin is currently disabled,
 		// spin up a temporary handler just for this test request.
 		$handler = $this->handler ?? new Handler( $dsn, $env );
-		$sent    = $handler->capture_message( 'DevPulse WordPress connection test', 'info' );
+		$sent    = $handler->send_test();
 
 		if ( $sent ) {
 			wp_send_json_success( __( 'Event sent!', 'devpulse' ) );
