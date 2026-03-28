@@ -13,7 +13,7 @@
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
 // Option names to delete
-$options = [
+$devpulse_options = [
     'devpulse_dsn',
     'devpulse_env',
     'devpulse_enabled',
@@ -22,23 +22,23 @@ $options = [
 ];
 
 // Delete single site options
-foreach ($options as $option) {
-    delete_option($option);
+foreach ($devpulse_options as $devpulse_option) {
+    delete_option($devpulse_option);
 }
 
 // Delete multisite options if in multisite context
 if (is_multisite()) {
     global $wpdb;
 
-    $blog_ids = $wpdb->get_col(
+    $devpulse_blog_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- uninstall: no caching needed.
         $wpdb->prepare("SELECT blog_id FROM %i", $wpdb->blogs)
     );
 
-    foreach ($blog_ids as $blog_id) {
+    foreach ($devpulse_blog_ids as $blog_id) {
         switch_to_blog($blog_id);
 
-        foreach ($options as $option) {
-            delete_option($option);
+        foreach ($devpulse_options as $devpulse_option) {
+            delete_option($devpulse_option);
         }
 
         delete_transient( 'devpulse_activated' );

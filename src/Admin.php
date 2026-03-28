@@ -9,6 +9,8 @@
 
 namespace DevPulseWP;
 
+defined( 'ABSPATH' ) || exit;
+
 /**
  * Renders the plugin settings page and handles admin AJAX.
  *

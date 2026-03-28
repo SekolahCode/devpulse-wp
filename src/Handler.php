@@ -133,6 +133,7 @@ class Handler {
 		}
 
 		set_exception_handler( [ $this, 'capture_exception' ] );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- intentional: error tracking plugin.
 		set_error_handler( [ $this, 'capture_error' ] );
 		register_shutdown_function( [ $this, 'capture_shutdown' ] );
 
@@ -413,17 +414,28 @@ class Handler {
 	// ── Payload Builder ───────────────────────────────────────────────────
 
 	private function build_from_exception( \Throwable $e ): array {
+		$stacktrace = $this->build_stacktrace( $e );
+
 		$payload = [
 			'level'     => 'error',
 			'exception' => [
 				'type'       => get_class( $e ),
 				'message'    => $e->getMessage(),
-				'stacktrace' => $this->build_stacktrace( $e ),
+				'stacktrace' => $stacktrace,
 			],
 			'context'   => $this->build_context(),
 			'request'   => $this->build_request(),
 			'timestamp' => gmdate( 'c' ),
 		];
+
+		// Attribute the error to the first plugin/theme-owned frame in the trace.
+		foreach ( $stacktrace as $frame ) {
+			$p = $frame['plugin'] ?? null;
+			if ( $p && in_array( $p['type'], [ 'plugin', 'mu-plugin', 'theme' ], true ) ) {
+				$payload['plugin'] = $p;
+				break;
+			}
+		}
 
 		if ( $this->release !== null ) {
 			$payload['release'] = $this->release;
@@ -437,19 +449,100 @@ class Handler {
 			'file'     => $e->getFile(),
 			'line'     => $e->getLine(),
 			'function' => null,
+			'context'  => $this->read_source_context( $e->getFile(), $e->getLine() ),
+			'plugin'   => $this->identify_plugin( $e->getFile() ),
 		] ];
 
 		foreach ( $e->getTrace() as $frame ) {
+			$file = $frame['file'] ?? null;
+			$line = $frame['line'] ?? null;
 			$frames[] = [
-				'file'     => $frame['file'] ?? null,
-				'line'     => $frame['line'] ?? null,
+				'file'     => $file,
+				'line'     => $line,
 				'function' => isset( $frame['class'] )
 					? "{$frame['class']}{$frame['type']}{$frame['function']}"
 					: ( $frame['function'] ?? null ),
+				'context'  => $this->read_source_context( $file, $line ),
+				'plugin'   => $this->identify_plugin( $file ),
 			];
 		}
 
 		return $frames;
+	}
+
+	/**
+	 * Read source code lines around the error location.
+	 *
+	 * @param string|null $file   Absolute path to the PHP file.
+	 * @param int|null    $line   Line number where the error occurred.
+	 * @param int         $radius Lines of context to capture above and below.
+	 * @return array{start: int, lines: array<int, string>}|null
+	 */
+	private function read_source_context( ?string $file, ?int $line, int $radius = 5 ): ?array {
+		if ( ! $file || ! $line || ! is_readable( $file ) ) {
+			return null;
+		}
+
+		try {
+			$spl   = new \SplFileObject( $file );
+			$start = max( 0, $line - $radius - 1 );
+			$spl->seek( $start );
+
+			$slice = [];
+			for ( $i = $start; $i < $line + $radius && ! $spl->eof(); $i++ ) {
+				$raw           = $spl->current();
+				$slice[ $i + 1 ] = is_string( $raw ) ? rtrim( $raw ) : '';
+				$spl->next();
+			}
+		} catch ( \RuntimeException $ex ) {
+			return null;
+		}
+
+		return $slice !== [] ? [ 'start' => $start + 1, 'lines' => $slice ] : null;
+	}
+
+	/**
+	 * Identify which WordPress plugin, theme, or core file owns a given path.
+	 *
+	 * @param string|null $file Absolute file path.
+	 * @return array{type: string, name?: string}|null
+	 */
+	private function identify_plugin( ?string $file ): ?array {
+		if ( ! $file || ! defined( 'WP_CONTENT_DIR' ) ) {
+			return null;
+		}
+
+		$file    = str_replace( '\\', '/', $file );
+		$content = str_replace( '\\', '/', WP_CONTENT_DIR );
+
+		// Regular plugins
+		if ( strpos( $file, $content . '/plugins/' ) === 0 ) {
+			$relative = substr( $file, strlen( $content . '/plugins/' ) );
+			return [ 'type' => 'plugin', 'name' => explode( '/', $relative )[0] ];
+		}
+
+		// Must-use plugins
+		if ( strpos( $file, $content . '/mu-plugins/' ) === 0 ) {
+			$relative = substr( $file, strlen( $content . '/mu-plugins/' ) );
+			return [ 'type' => 'mu-plugin', 'name' => explode( '/', $relative )[0] ];
+		}
+
+		// Themes
+		if ( strpos( $file, $content . '/themes/' ) === 0 ) {
+			$relative = substr( $file, strlen( $content . '/themes/' ) );
+			return [ 'type' => 'theme', 'name' => explode( '/', $relative )[0] ];
+		}
+
+		// WordPress core
+		if ( defined( 'ABSPATH' ) ) {
+			$root = str_replace( '\\', '/', rtrim( ABSPATH, '/' ) );
+			if ( strpos( $file, $root . '/wp-includes/' ) === 0
+				|| strpos( $file, $root . '/wp-admin/' ) === 0 ) {
+				return [ 'type' => 'core' ];
+			}
+		}
+
+		return null;
 	}
 
 	private function build_context(): array {
@@ -557,7 +650,7 @@ class Handler {
 		if ( apply_filters( 'devpulse_trust_proxy_headers', true ) ) {
 			if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
 				// XFF may be a comma-separated list; the first entry is the original client.
-				$ip = trim( explode( ',', wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) )[0] );
+				$ip = trim( explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) )[0] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
 					return sanitize_text_field( $ip );
 				}
@@ -593,7 +686,7 @@ class Handler {
 		}
 
 		// Sample rate: silently drop a configured fraction of events.
-		if ( $this->sample_rate < 1.0 && ( mt_rand() / mt_getrandmax() ) > $this->sample_rate ) {
+		if ( $this->sample_rate < 1.0 && ( wp_rand() / PHP_INT_MAX ) > $this->sample_rate ) {
 			return true;
 		}
 
@@ -652,7 +745,8 @@ class Handler {
 			] );
 			$stream_error = null;
 
-			set_error_handler( static function ( int $errno, string $errstr ) use ( &$stream_error ): bool {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- captures stream errors without @ suppression.
+		set_error_handler( static function ( int $errno, string $errstr ) use ( &$stream_error ): bool {
 				$stream_error = $errstr;
 				return true;
 			} );

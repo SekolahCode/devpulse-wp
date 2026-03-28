@@ -52,23 +52,11 @@ final class Plugin {
 	 * @since 1.0.0
 	 */
 	public function boot(): void {
-		// Load translations as early as possible — independent of plugin enabled state.
-		add_action( 'plugins_loaded', [ $this, 'load_textdomain' ], 0 );
-
 		// Initialise error handler at priority 1 so we catch errors thrown by other plugins.
 		add_action( 'plugins_loaded', [ $this, 'init_handler' ], 1 );
 
 		// Admin UI — only needed on admin / admin-ajax.php requests.
 		add_action( 'init', [ $this, 'init_admin' ] );
-	}
-
-	/**
-	 * Load the plugin text domain.
-	 *
-	 * @since 1.0.0
-	 */
-	public function load_textdomain(): void {
-		load_plugin_textdomain( 'devpulse', false, dirname( DEVPULSE_BASENAME ) . '/languages' );
 	}
 
 	/**
