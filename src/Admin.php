@@ -576,6 +576,7 @@ class Admin {
 		// 6. Multisite — repair each sub-site.
 		if ( is_multisite() ) {
 			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- repair tool, one-time admin action.
 			$blog_ids = $wpdb->get_col(
 				$wpdb->prepare( 'SELECT blog_id FROM %i', $wpdb->blogs )
 			);
@@ -586,8 +587,8 @@ class Admin {
 				foreach ( $defaults as $option => $default ) {
 					if ( get_option( $option ) === false ) {
 						add_option( $option, $default );
-						/* translators: 1: option name 2: site ID */
 						$repairs[] = sprintf(
+							/* translators: 1: option name 2: site ID */
 							__( 'Restored missing option %1$s on site %2$d.', 'devpulse' ),
 							$option,
 							(int) $blog_id
