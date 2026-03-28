@@ -4,7 +4,7 @@
  * Plugin Name:       DevPulse
  * Plugin URI:        https://github.com/SekolahCode/devpulse-wp
  * Description:       Real-time error tracking for WordPress — self-hosted.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Tested up to:      6.9
@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 1.0.0
  */
-define( 'DEVPULSE_VERSION', '1.1.0' );
+define( 'DEVPULSE_VERSION', '1.1.1' );
 
 /**
  * Absolute path to the main plugin file.
