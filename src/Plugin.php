@@ -70,16 +70,17 @@ final class Plugin {
 			return;
 		}
 
-		$dsn     = defined( 'DEVPULSE_DSN' )     ? DEVPULSE_DSN     : get_option( 'devpulse_dsn', '' );
-		$env     = defined( 'DEVPULSE_ENV' )     ? DEVPULSE_ENV     : get_option( 'devpulse_env', 'production' );
-		$enabled = defined( 'DEVPULSE_ENABLED' ) ? (bool) DEVPULSE_ENABLED : (bool) get_option( 'devpulse_enabled', 0 );
-		$release = defined( 'DEVPULSE_RELEASE' ) ? DEVPULSE_RELEASE : get_option( 'devpulse_release', '' );
+		$dsn          = defined( 'DEVPULSE_DSN' )          ? DEVPULSE_DSN          : get_option( 'devpulse_dsn', '' );
+		$env          = defined( 'DEVPULSE_ENV' )          ? DEVPULSE_ENV          : get_option( 'devpulse_env', 'production' );
+		$enabled      = defined( 'DEVPULSE_ENABLED' )      ? (bool) DEVPULSE_ENABLED      : (bool) get_option( 'devpulse_enabled', 0 );
+		$release      = defined( 'DEVPULSE_RELEASE' )      ? DEVPULSE_RELEASE      : get_option( 'devpulse_release', '' );
+		$track_vitals = defined( 'DEVPULSE_TRACK_VITALS' ) ? (bool) DEVPULSE_TRACK_VITALS : (bool) get_option( 'devpulse_track_vitals', 1 );
 
 		if ( ! $enabled || empty( $dsn ) ) {
 			return;
 		}
 
-		$this->handler = new Handler( $dsn, $env, $release ?: null );
+		$this->handler = new Handler( $dsn, $env, $release ?: null, $track_vitals );
 		$this->handler->boot();
 	}
 

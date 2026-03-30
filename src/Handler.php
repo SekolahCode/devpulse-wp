@@ -28,6 +28,9 @@ class Handler {
 	/** @var string|null Release identifier (semver, git SHA, etc.). */
 	private ?string $release;
 
+	/** @var bool Whether to inject the JS bundle for frontend vitals. */
+	private bool $track_vitals;
+
 	/** @var bool Recursive-send guard. */
 	private bool $sending = false;
 
@@ -61,14 +64,16 @@ class Handler {
 	private const RATE_LIMIT_TTL = 300;
 
 	/**
-	 * @param string      $dsn     Ingest URL.
-	 * @param string      $env     Environment name.
-	 * @param string|null $release Release identifier.
+	 * @param string      $dsn          Ingest URL.
+	 * @param string      $env          Environment name.
+	 * @param string|null $release      Release identifier.
+	 * @param bool        $track_vitals Whether to inject the browser vitals JS bundle.
 	 */
-	public function __construct( string $dsn, string $env = 'production', ?string $release = null ) {
-		$this->dsn     = $dsn;
-		$this->env     = $env;
-		$this->release = $release;
+	public function __construct( string $dsn, string $env = 'production', ?string $release = null, bool $track_vitals = true ) {
+		$this->dsn          = $dsn;
+		$this->env          = $env;
+		$this->release      = $release;
+		$this->track_vitals = $track_vitals;
 
 		/**
 		 * Filter: PHP error levels that DevPulse should ignore.
@@ -140,12 +145,78 @@ class Handler {
 		add_filter( 'wp_die_handler', [ $this, 'wp_die_handler' ] );
 		add_action( 'shutdown',       [ $this, 'capture_db_errors' ] );
 
+		if ( $this->track_vitals ) {
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_vitals_script' ] );
+		}
+
 		/**
 		 * Action: Fires after DevPulse handler is initialised.
 		 *
 		 * @since 1.0.0
 		 */
 		do_action( 'devpulse_loaded' );
+	}
+
+	// ── Frontend Vitals ───────────────────────────────────────────────────
+
+	/**
+	 * Enqueue the DevPulse browser bundle and auto-initialise it.
+	 *
+	 * Injects the UMD bundle on all public-facing pages and calls
+	 * DevPulse.default.init() with the site's DSN, environment, and release
+	 * so LCP, INP, CLS, TTFB and page_load are collected automatically —
+	 * exactly the same metrics as Lighthouse / Core Web Vitals.
+	 *
+	 * @since 1.2.0
+	 */
+	public function enqueue_vitals_script(): void {
+		/**
+		 * Filter: Disable the browser vitals bundle on specific pages.
+		 *
+		 * Return false to skip enqueueing (e.g., logged-in admins, maintenance mode).
+		 *
+		 * @since 1.2.0
+		 * @param bool $enqueue
+		 */
+		if ( ! apply_filters( 'devpulse_enqueue_vitals', true ) ) {
+			return;
+		}
+
+		$script_path    = 'assets/devpulse.umd.js';
+		$script_abs     = DEVPULSE_DIR . $script_path;
+		$script_version = file_exists( $script_abs )
+			? (string) filemtime( $script_abs )
+			: DEVPULSE_VERSION;
+
+		wp_register_script(
+			'devpulse-vitals',
+			plugins_url( $script_path, DEVPULSE_FILE ),
+			[],
+			$script_version,
+			[ 'in_footer' => true, 'strategy' => 'defer' ]
+		);
+
+		/**
+		 * Filter: Override vitals tracking options passed to DevPulse.init().
+		 *
+		 * @since 1.2.0
+		 * @param array $options
+		 */
+		$options = apply_filters( 'devpulse_vitals_options', [
+			'dsn'         => $this->dsn,
+			'environment' => $this->env,
+			'release'     => $this->release,
+			'trackVitals' => true,
+		] );
+
+		// wp_json_encode already escapes for JS string context.
+		$init_js = sprintf(
+			'(function(w){var dp=w.DevPulse;if(dp&&(dp.default||dp.DevPulse)){(dp.default||dp.DevPulse).init(%s);}})(window);',
+			wp_json_encode( $options )
+		);
+
+		wp_add_inline_script( 'devpulse-vitals', $init_js, 'after' );
+		wp_enqueue_script( 'devpulse-vitals' );
 	}
 
 	// ── Public API ────────────────────────────────────────────────────────

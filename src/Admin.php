@@ -197,6 +197,13 @@ class Admin {
 			'type'              => 'string',
 			'show_in_rest'      => false,
 		] );
+
+		register_setting( self::OPTION_GROUP, 'devpulse_track_vitals', [
+			'sanitize_callback' => 'absint',
+			'default'           => 1,
+			'type'              => 'boolean',
+			'show_in_rest'      => false,
+		] );
 	}
 
 	/**
@@ -275,11 +282,12 @@ class Admin {
 			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'devpulse' ) );
 		}
 
-		$dsn         = get_option( 'devpulse_dsn', '' );
-		$env         = get_option( 'devpulse_env', 'production' );
-		$enabled     = (int) get_option( 'devpulse_enabled', 0 );
-		$sample_rate = (float) get_option( 'devpulse_sample_rate', 1.0 );
-		$release     = get_option( 'devpulse_release', '' );
+		$dsn          = get_option( 'devpulse_dsn', '' );
+		$env          = get_option( 'devpulse_env', 'production' );
+		$enabled      = (int) get_option( 'devpulse_enabled', 0 );
+		$sample_rate  = (float) get_option( 'devpulse_sample_rate', 1.0 );
+		$release      = get_option( 'devpulse_release', '' );
+		$track_vitals = (int) get_option( 'devpulse_track_vitals', 1 );
 
 		$dsn_via_constant  = defined( 'DEVPULSE_DSN' );
 		// Show an advisory when the DSN (which contains an API key) is stored in
@@ -329,6 +337,33 @@ class Admin {
 											<?php checked( $enabled, 1 ); ?> />
 										<?php esc_html_e( 'Enable error and performance monitoring', 'devpulse' ); ?>
 									</label>
+								</fieldset>
+							</td>
+						</tr>
+
+						<tr>
+							<th scope="row">
+								<label for="devpulse_track_vitals">
+									<?php esc_html_e( 'Frontend Performance Vitals', 'devpulse' ); ?>
+								</label>
+							</th>
+							<td>
+								<fieldset>
+									<legend class="screen-reader-text">
+										<?php esc_html_e( 'Frontend Performance Vitals', 'devpulse' ); ?>
+									</legend>
+									<label for="devpulse_track_vitals">
+										<input
+											type="checkbox"
+											id="devpulse_track_vitals"
+											name="devpulse_track_vitals"
+											value="1"
+											<?php checked( $track_vitals, 1 ); ?> />
+										<?php esc_html_e( 'Collect real-user Core Web Vitals (LCP, INP, CLS, TTFB, page load) on every page view', 'devpulse' ); ?>
+									</label>
+									<p class="description">
+										<?php esc_html_e( 'Injects a lightweight browser script (~4 KB) that measures Lighthouse-equivalent metrics and sends them as a single grouped issue. Override with DEVPULSE_TRACK_VITALS in wp-config.php.', 'devpulse' ); ?>
+									</p>
 								</fieldset>
 							</td>
 						</tr>
@@ -532,11 +567,12 @@ class Admin {
 
 		$repairs  = [];
 		$defaults = [
-			'devpulse_dsn'         => '',
-			'devpulse_env'         => 'production',
-			'devpulse_enabled'     => 0,
-			'devpulse_sample_rate' => 1.0,
-			'devpulse_release'     => '',
+			'devpulse_dsn'          => '',
+			'devpulse_env'          => 'production',
+			'devpulse_enabled'      => 0,
+			'devpulse_sample_rate'  => 1.0,
+			'devpulse_release'      => '',
+			'devpulse_track_vitals' => 1,
 		];
 
 		// 1. Restore any missing options.
