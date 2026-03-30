@@ -4,7 +4,7 @@ Tags: error-tracking, monitoring, performance, logging, sentry
 Requires at least: 6.3
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.2.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -18,7 +18,8 @@ DevPulse is a self-hosted error tracking and performance monitoring plugin for W
 
 * Captures PHP errors, warnings, notices, and fatal errors
 * Captures unhandled exceptions automatically
-* Lightweight — zero impact on page load for your visitors
+* Frontend Core Web Vitals (LCP, INP, CLS, TTFB, page load) — real-user Lighthouse metrics
+* Lightweight — the backend handler has zero JS footprint; the vitals bundle is ~4 KB deferred
 * Configurable via the WordPress admin or `wp-config.php` constants
 * Works with any self-hosted DevPulse server
 
@@ -68,10 +69,17 @@ Errors are captured with a short timeout (2 seconds by default) so your site is 
 
 == Changelog ==
 
-= 0.1.0 =
-* Initial release
+= 1.2.0 =
+* Added frontend Core Web Vitals collection (LCP, INP, CLS, TTFB, page load) via bundled browser SDK
+* New "Frontend Performance Vitals" setting in wp-admin; can be disabled per-page with the `devpulse_enqueue_vitals` filter or via `define('DEVPULSE_TRACK_VITALS', false)` in wp-config.php
+
+= 1.1.1 =
+* Stability and compatibility improvements
+
+= 1.0.0 =
+* Initial public release — PHP error and exception capture, wp_die() and fatal error handlers, admin settings page
 
 == Upgrade Notice ==
 
-= 0.1.0 =
-Initial release — no upgrade steps required.
+= 1.2.0 =
+Adds real-user Core Web Vitals tracking. A lightweight JS bundle (~4 KB) is now injected on public pages by default. Disable it in Settings → DevPulse if not needed.
