@@ -19,8 +19,14 @@ defined( 'ABSPATH' ) || exit;
  */
 class Handler {
 
-	/** @var string Ingest DSN URL. */
+	/** @var string Original DSN as passed by the caller (used for browser JS init). */
+	private string $full_dsn;
+
+	/** @var string Ingest endpoint URL (DSN without the trailing API key segment). */
 	private string $dsn;
+
+	/** @var string API key extracted from DSN, sent as X-API-Key header. */
+	private string $api_key;
 
 	/** @var string Environment name. */
 	private string $env;
@@ -70,7 +76,13 @@ class Handler {
 	 * @param bool        $track_vitals Whether to inject the browser vitals JS bundle.
 	 */
 	public function __construct( string $dsn, string $env = 'production', ?string $release = null, bool $track_vitals = true ) {
-		$this->dsn          = $dsn;
+		// Store the original DSN for browser JS init (browser SDK parses it itself).
+		$this->full_dsn = $dsn;
+		// Extract the API key from the DSN path so it is sent as X-API-Key header
+		// rather than embedded in the URL (prevents leakage in server/CDN logs).
+		$parts          = explode( '/', rtrim( $dsn, '/' ) );
+		$this->api_key  = array_pop( $parts );
+		$this->dsn      = implode( '/', $parts );
 		$this->env          = $env;
 		$this->release      = $release;
 		$this->track_vitals = $track_vitals;
@@ -203,7 +215,7 @@ class Handler {
 		 * @param array $options
 		 */
 		$options = apply_filters( 'devpulse_vitals_options', [
-			'dsn'         => $this->dsn,
+			'dsn'         => $this->full_dsn, // browser SDK needs the full DSN (including key segment)
 			'environment' => $this->env,
 			'release'     => $this->release,
 			'trackVitals' => true,
@@ -223,7 +235,7 @@ class Handler {
 
 	/** @since 1.0.0 */
 	public function get_dsn(): string {
-		return $this->dsn;
+		return $this->full_dsn; // returns the original DSN as provided by the caller
 	}
 
 	/** @since 1.0.0 */
@@ -267,7 +279,7 @@ class Handler {
 		$response = wp_remote_post( $this->dsn, [
 			'timeout'     => 5,    // longer timeout: user is waiting for feedback
 			'blocking'    => true, // must be blocking so we can read the status code
-			'headers'     => [ 'Content-Type' => 'application/json' ],
+			'headers'     => [ 'Content-Type' => 'application/json', 'X-API-Key' => $this->api_key ],
 			'body'        => $json,
 			'data_format' => 'body',
 		] );
@@ -784,7 +796,7 @@ class Handler {
 				$response = wp_remote_post( $this->dsn, [
 					'timeout'     => 2,
 					'blocking'    => false,
-					'headers'     => [ 'Content-Type' => 'application/json' ],
+					'headers'     => [ 'Content-Type' => 'application/json', 'X-API-Key' => $this->api_key ],
 					'body'        => $json,
 					'data_format' => 'body',
 				] );
@@ -808,7 +820,7 @@ class Handler {
 			$context      = stream_context_create( [
 				'http' => [
 					'method'        => 'POST',
-					'header'        => "Content-Type: application/json\r\n",
+					'header'        => "Content-Type: application/json\r\nX-API-Key: {$this->api_key}\r\n",
 					'content'       => $json,
 					'timeout'       => 2,
 					'ignore_errors' => true,
@@ -822,7 +834,7 @@ class Handler {
 				return true;
 			} );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-			$result = file_get_contents( $this->dsn, false, $context );
+			$result = file_get_contents( $this->dsn, false, $context ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			restore_error_handler();
 
 			if ( $stream_error !== null ) {
