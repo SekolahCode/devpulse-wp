@@ -500,15 +500,16 @@ class Handler {
 		$stacktrace = $this->build_stacktrace( $e );
 
 		$payload = [
-			'level'     => 'error',
-			'exception' => [
+			'level'       => 'error',
+			'exception'   => [
 				'type'       => get_class( $e ),
 				'message'    => $e->getMessage(),
 				'stacktrace' => $stacktrace,
 			],
-			'context'   => $this->build_context(),
-			'request'   => $this->build_request(),
-			'timestamp' => gmdate( 'c' ),
+			'context'     => $this->build_context(),
+			'request'     => $this->build_request(),
+			'sdk_version' => 'devpulse-wordpress/2.0.0',
+			'timestamp'   => gmdate( 'c' ),
 		];
 
 		// Attribute the error to the first plugin/theme-owned frame in the trace.
@@ -714,28 +715,68 @@ class Handler {
 	/**
 	 * Resolve the real client IP, accounting for reverse proxies and CDNs.
 	 *
-	 * Checks X-Forwarded-For → X-Real-IP → REMOTE_ADDR in order.
-	 * Disable proxy header trust on direct-to-internet servers with:
+	 * Reads X-Forwarded-For only when REMOTE_ADDR is a known trusted proxy.
+	 * This prevents IP spoofing — an attacker cannot fake their IP by injecting
+	 * an X-Forwarded-For header unless the request actually arrives via a proxy
+	 * whose IP you trust.
+	 *
+	 * Configure trusted proxy IPs/CIDRs with:
+	 *   add_filter( 'devpulse_trusted_proxies', fn() => [ '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16' ] );
+	 *
+	 * Disable proxy header trust entirely on direct-to-internet servers with:
 	 *   add_filter( 'devpulse_trust_proxy_headers', '__return_false' );
 	 *
-	 * @since 1.0.0
+	 * @since 2.0.0
 	 * @return string|null
 	 */
 	private function resolve_client_ip(): ?string {
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: null;
+
 		/**
 		 * Filter: Whether to read X-Forwarded-For / X-Real-IP headers.
-		 *
-		 * Disable on servers where proxy headers are not sanitised upstream.
 		 *
 		 * @since 1.0.0
 		 * @param bool $trust
 		 */
-		if ( apply_filters( 'devpulse_trust_proxy_headers', true ) ) {
+		if ( ! apply_filters( 'devpulse_trust_proxy_headers', true ) ) {
+			return $remote_addr;
+		}
+
+		/**
+		 * Filter: List of trusted proxy IP addresses or CIDR ranges.
+		 *
+		 * X-Forwarded-For is only trusted when REMOTE_ADDR matches one of these.
+		 * Defaults to RFC-1918 private ranges (suitable for most WordPress hosting
+		 * behind a load balancer on a private network). Override with your actual
+		 * proxy IPs for stricter control.
+		 *
+		 * @since 2.0.0
+		 * @param string[] $proxies IP addresses or CIDR notation ranges.
+		 */
+		$trusted_proxies = apply_filters( 'devpulse_trusted_proxies', [
+			'10.0.0.0/8',
+			'172.16.0.0/12',
+			'192.168.0.0/16',
+			'127.0.0.1',
+			'::1',
+		] );
+
+		if ( $remote_addr && $this->ip_in_list( $remote_addr, $trusted_proxies ) ) {
 			if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-				// XFF may be a comma-separated list; the first entry is the original client.
-				$ip = trim( explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) )[0] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return sanitize_text_field( $ip );
+				// XFF is a comma-separated list appended left-to-right.
+				// Walk right-to-left and return the first IP that is NOT itself
+				// a trusted proxy — that is the real client IP.
+				$ips = array_reverse( array_map( 'trim', explode( ',', wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				foreach ( $ips as $candidate ) {
+					$candidate = sanitize_text_field( $candidate );
+					if (
+						filter_var( $candidate, FILTER_VALIDATE_IP ) &&
+						! $this->ip_in_list( $candidate, $trusted_proxies )
+					) {
+						return $candidate;
+					}
 				}
 			}
 
@@ -747,9 +788,31 @@ class Handler {
 			}
 		}
 
-		return isset( $_SERVER['REMOTE_ADDR'] )
-			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
-			: null;
+		return $remote_addr;
+	}
+
+	/**
+	 * Check whether an IP address falls within any of the given IPs or CIDR ranges.
+	 *
+	 * @param string   $ip      IP address to test.
+	 * @param string[] $list    IPs or CIDR ranges (e.g. "10.0.0.0/8").
+	 * @return bool
+	 */
+	private function ip_in_list( string $ip, array $list ): bool {
+		$ip_long = ip2long( $ip );
+		foreach ( $list as $entry ) {
+			if ( strpos( $entry, '/' ) !== false ) {
+				[ $range, $bits ] = explode( '/', $entry, 2 );
+				$mask    = $bits >= 32 ? -1 : ~( ( 1 << ( 32 - (int) $bits ) ) - 1 );
+				$network = ip2long( $range ) & $mask;
+				if ( $ip_long !== false && ( $ip_long & $mask ) === $network ) {
+					return true;
+				}
+			} elseif ( $ip === $entry ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// ── HTTP Transport ────────────────────────────────────────────────────
