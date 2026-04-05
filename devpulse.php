@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 1.0.0
  */
-define( 'DEVPULSE_VERSION', '1.2.0' );
+define( 'DEVPULSE_VERSION', '2.0.0' );
 
 /**
  * Absolute path to the main plugin file.
