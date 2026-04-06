@@ -15,7 +15,7 @@
     "require-dev": {
         "php-stubs/wordpress-stubs": "^6.7",
         "phpstan/phpstan": "^1.10",
-        "phpunit/phpunit": "^10.0|^11.0"
+        "phpunit/phpunit": "^10.5"
     },
     "autoload": {
         "psr-4": {
