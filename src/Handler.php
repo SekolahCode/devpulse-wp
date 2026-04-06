@@ -400,11 +400,11 @@ class Handler {
 			E_COMPILE_ERROR => 'E_COMPILE_ERROR',
 		];
 
-		$payload               = $this->build_from_exception(
+		$payload                = $this->build_from_exception(
 			new \ErrorException( $error['message'], 0, $error['type'], $error['file'], $error['line'] )
 		);
-		$payload['is_fatal']   = true;
-		$payload['error_type'] = $type_names[ $error['type'] ] ?? 'UNKNOWN';
+		$payload['is_fatal']    = true;
+		$payload['error_type']  = $type_names[ $error['type'] ];
 
 		$this->send( $payload );
 	}
@@ -423,7 +423,8 @@ class Handler {
 	public function wp_die_handler(): callable {
 		return function ( $message, $title = '', $args = [] ) {
 			// Skip common AJAX termination patterns — these are expected, not errors.
-			$is_benign = empty( $message ) || $message === '0' || is_int( $message );
+			$msg_str = is_string( $message ) ? $message : '';
+			$is_benign = empty( $message ) || $msg_str === '0' || is_int( $message );
 
 			/**
 			 * Filter: Skip additional wp_die calls that should not be reported.
@@ -483,8 +484,8 @@ class Handler {
 		 * @since 1.0.0
 		 * @param bool $log_query
 		 */
-		if ( apply_filters( 'devpulse_log_db_query', false ) ) {
-			$context['last_query'] = wp_unslash( $wpdb->last_query );
+		if ( apply_filters( 'devpulse_log_db_query', false ) && isset( $wpdb->last_query ) ) {
+			$context['last_query'] = wp_unslash( (string) $wpdb->last_query );
 		}
 
 		$this->send( [
@@ -545,7 +546,7 @@ class Handler {
 				'line'     => $line,
 				'function' => isset( $frame['class'] )
 					? "{$frame['class']}{$frame['type']}{$frame['function']}"
-					: ( $frame['function'] ?? null ),
+					: ( $frame['function'] ),
 				'context'  => $this->read_source_context( $file, $line ),
 				'plugin'   => $this->identify_plugin( $file ),
 			];

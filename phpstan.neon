@@ -3,4 +3,10 @@ parameters:
         - src
     level: 5
     scanFiles:
+        - devpulse.php
         - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+    stubFiles:
+        - phpstan-stubs.php
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        - '#Constant DEVPULSE_(DIR|DSN) not found#'

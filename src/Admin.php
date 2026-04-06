@@ -426,7 +426,7 @@ class Admin {
 									type="number"
 									id="devpulse_sample_rate"
 									name="devpulse_sample_rate"
-									value="<?php echo esc_attr( $sample_rate ); ?>"
+									value="<?php echo esc_attr( (string) $sample_rate ); ?>"
 									min="0"
 									max="1"
 									step="0.01"
@@ -518,12 +518,10 @@ class Admin {
 	public function ajax_test(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( __( 'Insufficient permissions.', 'devpulse' ), 403 );
-			return;
 		}
 
 		if ( ! check_ajax_referer( 'devpulse_test', 'nonce', false ) ) {
 			wp_send_json_error( __( 'Invalid nonce.', 'devpulse' ), 403 );
-			return;
 		}
 
 		$dsn = defined( 'DEVPULSE_DSN' ) ? DEVPULSE_DSN : get_option( 'devpulse_dsn', '' );
@@ -531,7 +529,6 @@ class Admin {
 
 		if ( empty( $dsn ) ) {
 			wp_send_json_error( __( 'DSN is not configured.', 'devpulse' ) );
-			return;
 		}
 
 		// Reuse the running handler; if the plugin is currently disabled,
@@ -557,12 +554,10 @@ class Admin {
 	public function repair_db(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( __( 'Insufficient permissions.', 'devpulse' ), 403 );
-			return;
 		}
 
 		if ( ! check_ajax_referer( 'devpulse_repair', 'nonce', false ) ) {
 			wp_send_json_error( __( 'Invalid nonce.', 'devpulse' ), 403 );
-			return;
 		}
 
 		$repairs  = [];
