@@ -98,7 +98,6 @@ class Handler {
 		 */
 		$this->ignored_levels = (array) apply_filters( 'devpulse_ignored_error_levels', [
 			E_NOTICE,
-			E_STRICT,
 			E_DEPRECATED,
 			E_USER_DEPRECATED,
 		] );
@@ -235,7 +234,7 @@ class Handler {
 
 	/** @since 1.0.0 */
 	public function get_dsn(): string {
-		return $this->full_dsn; // returns the original DSN as provided by the caller
+		return $this->dsn;
 	}
 
 	/** @since 1.0.0 */
