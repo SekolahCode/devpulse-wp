@@ -22,6 +22,11 @@
             "DevPulseWP\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "DevPulseWP\\Tests\\": "tests/"
+        }
+    },
     "scripts": {
         "test": "phpunit",
         "analyse": "phpstan analyse"
