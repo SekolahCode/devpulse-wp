@@ -1,10 +1,10 @@
 === DevPulse ===
 Contributors: sekolahcode
-Tags: error-tracking, monitoring, performance, logging, sentry
+Tags: error-tracking, monitoring, performance, logging, debugging
 Requires at least: 6.3
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.2
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -69,6 +69,21 @@ Errors are captured with a short timeout (2 seconds by default) so your site is 
 
 == Changelog ==
 
+= 2.0.2 =
+* Fixed: the plugin version header and changelog had drifted out of sync
+  with actual releases since 1.2.0 — this release reconciles them and
+  documents what shipped in 2.0.0/2.0.1 below.
+
+= 2.0.1 =
+* Security: only trust the `X-Forwarded-For` header when `REMOTE_ADDR` is a
+  known, configured trusted proxy — prevents client-supplied headers from
+  spoofing the reported IP address on sites not behind a proxy.
+
+= 2.0.0 =
+* Security: the DSN's API key is no longer sent in the request URL — it's
+  extracted and sent as an `X-API-Key` header instead, so it can no longer
+  leak into server or CDN access logs.
+
 = 1.2.0 =
 * Added frontend Core Web Vitals collection (LCP, INP, CLS, TTFB, page load) via bundled browser SDK
 * New "Frontend Performance Vitals" setting in wp-admin; can be disabled per-page with the `devpulse_enqueue_vitals` filter or via `define('DEVPULSE_TRACK_VITALS', false)` in wp-config.php
@@ -80,6 +95,9 @@ Errors are captured with a short timeout (2 seconds by default) so your site is 
 * Initial public release — PHP error and exception capture, wp_die() and fatal error handlers, admin settings page
 
 == Upgrade Notice ==
+
+= 2.0.1 =
+Security fix: only trust X-Forwarded-For from a configured trusted proxy. Recommended for all sites not running behind a reverse proxy/load balancer.
 
 = 1.2.0 =
 Adds real-user Core Web Vitals tracking. A lightweight JS bundle (~4 KB) is now injected on public pages by default. Disable it in Settings → DevPulse if not needed.
