@@ -74,6 +74,7 @@ jobs:
           rsync -r \
             --exclude='.git' \
             --exclude='.github' \
+            --exclude='.githooks' \
             --exclude='.gitattributes' \
             --exclude='.gitignore' \
             --exclude='composer.json' \
@@ -81,6 +82,8 @@ jobs:
             --exclude='vendor' \
             --exclude='tests' \
             --exclude='phpstan.*' \
+            --exclude='phpstan-stubs.php' \
+            --exclude='phpunit.xml' \
             --exclude='README.md' \
             --exclude='dist' \
             . dist/devpulse/
